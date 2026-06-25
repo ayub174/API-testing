@@ -209,3 +209,44 @@ select {
 .muted {
   color: var(--muted);
 }
+
+.notice {
+  background: #e8f5ec;
+  color: #1c7a3f;
+  border: 1px solid #b6e0c4;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.switch-auth {
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0.25rem 0 0;
+}
+
+.filter-row {
+  margin-bottom: 1rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #eef2fb;
+  color: var(--primary-dark);
+}
+.badge-ok {
+  background: #e8f5ec;
+  color: #1c7a3f;
+}
+.badge-overdue {
+  background: #fdecea;
+  color: var(--danger);
+}
+.row-overdue {
+  background: #fff6f5;
+}

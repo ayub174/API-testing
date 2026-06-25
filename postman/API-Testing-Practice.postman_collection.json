@@ -46,6 +46,16 @@
       "type": "string"
     },
     {
+      "key": "anvandareToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "loanId",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "bookId",
       "value": "1",
       "type": "string"
@@ -912,6 +922,275 @@
               "raw": "{{baseUrl}}/api/admin/accounts/handlaggare/permissions/BOOK_DELETE",
               "host": ["{{baseUrl}}"],
               "path": ["api", "admin", "accounts", "handlaggare", "permissions", "BOOK_DELETE"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Lån",
+      "description": "Lånesystemet: en låntagare (ANVANDARE) söker, lånar och återlämnar böcker. Personal ser alla lån. Kör requesterna uppifrån och ned.",
+      "item": [
+        {
+          "name": "POST - Registrera låntagare (201 eller 409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 201 (skapad) eller 409 (finns redan)', function () {",
+                  "    pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"lantagare1\",\n  \"password\": \"lantagare123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "POST - Login som låntagare",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Rollen är ANVANDARE', function () {",
+                  "    pm.expect(pm.response.json().role).to.equal('ANVANDARE');",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('anvandareToken', pm.response.json().token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"anvandare\",\n  \"password\": \"anvandare123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "POST - Låna en bok",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Lånet har ett förfallodatum och är inte återlämnat', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.dueDate).to.be.a('string');",
+                  "    pm.expect(jsonData.returned).to.equal(false);",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('loanId', pm.response.json().id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{anvandareToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookId\": 3\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/loans",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "loans"]
+            }
+          }
+        },
+        {
+          "name": "GET - Mina lån",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Svaret är en lista med lån', function () {",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{anvandareToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/loans/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "loans", "me"]
+            }
+          }
+        },
+        {
+          "name": "GET - Låntagare får inte se alla lån (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 403', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{anvandareToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/loans",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "loans"]
+            }
+          }
+        },
+        {
+          "name": "GET - Alla lån som personal (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Svaret är en lista', function () {",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/loans?active=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "loans"],
+              "query": [
+                { "key": "active", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST - Återlämna lånet",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Lånet är återlämnat', function () {",
+                  "    pm.expect(pm.response.json().returned).to.equal(true);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{anvandareToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/loans/{{loanId}}/return",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "loans", "{{loanId}}", "return"]
+            }
+          }
+        },
+        {
+          "name": "POST - Låna slutsåld bok (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 409 Conflict', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{anvandareToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookId\": 4\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/loans",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "loans"]
             }
           }
         }

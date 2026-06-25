@@ -51,7 +51,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // --- Öppna endpoints ---
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .requestMatchers("/api/auth/login", "/api/auth/logout",
+                        .requestMatchers("/api/auth/login", "/api/auth/logout", "/api/auth/register",
                                 "/api/auth/basic", "/api/auth/api-key").permitAll()
                         .requestMatchers("/api/status/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/users").permitAll()
@@ -71,7 +71,26 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT, "/api/users/**").hasAuthority(Permission.USER_MANAGE.name())
                         .requestMatchers(HttpMethod.DELETE, "/api/users/**").hasAuthority(Permission.USER_MANAGE.name())
 
-                        // --- Admin: behörighetshantering ---
+                        // --- Lån ---
+                        .requestMatchers(HttpMethod.GET, "/api/loans/me").hasAuthority(Permission.LOAN_VIEW_OWN.name())
+                        .requestMatchers(HttpMethod.GET, "/api/loans").hasAuthority(Permission.LOAN_VIEW_ALL.name())
+                        .requestMatchers(HttpMethod.POST, "/api/loans/borrow-for").hasAuthority(Permission.LOAN_MANAGE.name())
+                        .requestMatchers(HttpMethod.POST, "/api/loans/*/return")
+                                .hasAnyAuthority(Permission.LOAN_RETURN.name(), Permission.LOAN_MANAGE.name())
+                        .requestMatchers(HttpMethod.POST, "/api/loans").hasAuthority(Permission.LOAN_BORROW.name())
+
+                        // --- Admin: roll-/behörighetshantering (mest specifika först) ---
+                        .requestMatchers(HttpMethod.POST, "/api/admin/accounts/*/permissions/*").hasAuthority(Permission.PERMISSION_MANAGE.name())
+                        .requestMatchers(HttpMethod.DELETE, "/api/admin/accounts/*/permissions/*").hasAuthority(Permission.PERMISSION_MANAGE.name())
+                        .requestMatchers(HttpMethod.PUT, "/api/admin/accounts/*/role").hasAuthority(Permission.PERMISSION_MANAGE.name())
+
+                        // --- Admin: kontohantering ---
+                        .requestMatchers(HttpMethod.GET, "/api/admin/accounts")
+                                .hasAnyAuthority(Permission.ACCOUNT_MANAGE.name(), Permission.PERMISSION_MANAGE.name())
+                        .requestMatchers(HttpMethod.POST, "/api/admin/accounts").hasAuthority(Permission.ACCOUNT_MANAGE.name())
+                        .requestMatchers(HttpMethod.DELETE, "/api/admin/accounts/*").hasAuthority(Permission.ACCOUNT_MANAGE.name())
+
+                        // --- Admin: övrigt (roller/permissions-listor) ---
                         .requestMatchers("/api/admin/**").hasAuthority(Permission.PERMISSION_MANAGE.name())
 
                         .anyRequest().authenticated()

@@ -4,9 +4,11 @@ import java.util.EnumSet;
 import java.util.Set;
 
 /**
- * Två roller med var sin uppsättning standard-behörigheter.
- * ADMIN har allt; HANDLAGGARE har en delmängd. En admin kan sedan
- * lägga till/ta bort enskilda behörigheter per konto (granulärt).
+ * Tre roller med var sin uppsättning standard-behörigheter:
+ *  - ANVANDARE  = låntagare (sök + låna + egna lån)
+ *  - HANDLAGGARE = bibliotekarie (katalog, lager, lånedisk)
+ *  - ADMIN      = full kontroll (personal, roller, permanent borttagning)
+ * En admin kan dessutom slå på/av enskilda behörigheter per konto (granulärt).
  */
 public enum Role {
 
@@ -16,7 +18,20 @@ public enum Role {
             Permission.BOOK_READ,
             Permission.BOOK_CREATE,
             Permission.BOOK_UPDATE,
-            Permission.USER_READ
+            Permission.USER_READ,
+            Permission.USER_MANAGE,
+            Permission.LOAN_BORROW,
+            Permission.LOAN_RETURN,
+            Permission.LOAN_VIEW_OWN,
+            Permission.LOAN_VIEW_ALL,
+            Permission.LOAN_MANAGE
+    )),
+
+    ANVANDARE(EnumSet.of(
+            Permission.BOOK_READ,
+            Permission.LOAN_BORROW,
+            Permission.LOAN_RETURN,
+            Permission.LOAN_VIEW_OWN
     ));
 
     private final Set<Permission> defaultPermissions;

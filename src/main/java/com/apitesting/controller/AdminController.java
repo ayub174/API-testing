@@ -2,24 +2,28 @@ package com.apitesting.controller;
 
 import com.apitesting.model.Account;
 import com.apitesting.model.AccountResponse;
+import com.apitesting.model.CreateAccountRequest;
 import com.apitesting.security.Permission;
 import com.apitesting.security.Role;
 import com.apitesting.service.AccountService;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Admin-vy för behörighetshantering. Kräver PERMISSION_MANAGE (centralt i
- * SecurityConfig; @PreAuthorize här som extra demonstration av metod-säkerhet).
+ * Admin-vy för konto- och behörighetshantering. Behörigheterna styrs per
+ * endpoint i SecurityConfig:
+ *  - kontohantering (skapa/ta bort konto, lista) → ACCOUNT_MANAGE
+ *  - roll-/behörighetshantering (grant/revoke/role) → PERMISSION_MANAGE
+ * (En ADMIN har båda; en HANDLAGGARE har ingen av dem.)
  */
 @RestController
 @RequestMapping("/api/admin")
-@PreAuthorize("hasAuthority('PERMISSION_MANAGE')")
 public class AdminController {
 
     private final AccountService accountService;
@@ -35,6 +39,23 @@ public class AdminController {
                 .map(AccountResponse::new)
                 .toList();
         return ResponseEntity.ok(accounts);
+    }
+
+    // POST /api/admin/accounts - skapa ett konto med valfri roll (ACCOUNT_MANAGE)
+    @PostMapping("/accounts")
+    public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
+        Account account = accountService.createAccount(
+                request.getUsername(), request.getPassword(), parseRole(request.getRole()));
+        return ResponseEntity
+                .created(URI.create("/api/admin/accounts/" + account.getUsername()))
+                .body(new AccountResponse(account));
+    }
+
+    // DELETE /api/admin/accounts/{username} - ta bort ett konto (ACCOUNT_MANAGE)
+    @DeleteMapping("/accounts/{username}")
+    public ResponseEntity<Void> deleteAccount(@PathVariable String username) {
+        accountService.deleteAccount(username);
+        return ResponseEntity.noContent().build();
     }
 
     // POST /api/admin/accounts/{username}/permissions/{permission} - ge behörighet

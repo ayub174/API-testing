@@ -1,13 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import type { Account, Permission, Role } from '../types';
 
 export default function AdminPage() {
+  const { hasPermission } = useAuth();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const canManageAccounts = hasPermission('ACCOUNT_MANAGE');
+  const canManagePermissions = hasPermission('PERMISSION_MANAGE');
+
+  const [form, setForm] = useState({ username: '', password: '', role: 'ANVANDARE' });
 
   async function load() {
     setLoading(true);
@@ -54,19 +61,80 @@ export default function AdminPage() {
     }
   }
 
+  async function handleCreate(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    try {
+      await api.post<Account>('/admin/accounts', form);
+      setForm({ username: '', password: '', role: 'ANVANDARE' });
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Kunde inte skapa kontot');
+    }
+  }
+
+  async function handleDelete(username: string) {
+    setError(null);
+    try {
+      await api.del(`/admin/accounts/${username}`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Kunde inte ta bort kontot');
+    }
+  }
+
   if (loading) return <p>Laddar…</p>;
 
   return (
     <div>
-      <h2>Admin – behörigheter</h2>
+      <h2>Admin – konton & behörigheter</h2>
       <p className="muted">
-        Bocka i/ur behörigheter per konto. Ändringar slår igenom direkt (kontot
-        kan behöva ladda om sin vy).
+        Bocka i/ur behörigheter per konto, byt roll, eller skapa/ta bort konton.
+        Ändringar slår igenom direkt (kontot kan behöva ladda om sin vy).
       </p>
       {error && (
         <div className="error" role="alert" data-testid="admin-error">
           {error}
         </div>
+      )}
+
+      {canManageAccounts && (
+        <form className="book-form" onSubmit={handleCreate} data-testid="create-account-form">
+          <h3>Skapa konto</h3>
+          <div className="form-row">
+            <input
+              placeholder="Användarnamn"
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value })}
+              data-testid="new-account-username"
+              required
+            />
+            <input
+              placeholder="Lösenord"
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              data-testid="new-account-password"
+              required
+            />
+            <select
+              value={form.role}
+              onChange={(e) => setForm({ ...form, role: e.target.value })}
+              data-testid="new-account-role"
+            >
+              {roles.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-actions">
+            <button type="submit" data-testid="create-account-submit">
+              Skapa konto
+            </button>
+          </div>
+        </form>
       )}
 
       <table className="data-table admin-table" data-testid="admin-table">
@@ -79,6 +147,7 @@ export default function AdminPage() {
                 {p}
               </th>
             ))}
+            {canManageAccounts && <th>Konto</th>}
           </tr>
         </thead>
         <tbody>
@@ -89,6 +158,7 @@ export default function AdminPage() {
                 <select
                   value={account.role}
                   onChange={(e) => changeRole(account, e.target.value as Role)}
+                  disabled={!canManagePermissions}
                   data-testid={`role-${account.username}`}
                 >
                   {roles.map((r) => (
@@ -103,11 +173,23 @@ export default function AdminPage() {
                   <input
                     type="checkbox"
                     checked={account.permissions.includes(p)}
+                    disabled={!canManagePermissions}
                     onChange={(e) => togglePermission(account, p, e.target.checked)}
                     data-testid={`perm-${account.username}-${p}`}
                   />
                 </td>
               ))}
+              {canManageAccounts && (
+                <td className="actions">
+                  <button
+                    className="danger"
+                    onClick={() => handleDelete(account.username)}
+                    data-testid={`delete-account-${account.username}`}
+                  >
+                    Ta bort
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

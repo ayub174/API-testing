@@ -1,29 +1,27 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import { ApiError } from '../api/client';
 
-export default function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+export default function RegisterPage() {
+  const { login } = useAuth();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  if (isAuthenticated) {
-    navigate('/books', { replace: true });
-  }
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
+      await api.post('/auth/register', { username, password });
+      // Logga in direkt efter lyckad registrering.
       await login(username, password);
       navigate('/books', { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Inloggningen misslyckades');
+      setError(err instanceof ApiError ? err.message : 'Registreringen misslyckades');
     } finally {
       setBusy(false);
     }
@@ -32,11 +30,11 @@ export default function LoginPage() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={handleSubmit}>
-        <h1>📚 Boksystem</h1>
-        <p className="subtitle">Logga in för att fortsätta</p>
+        <h1>📚 Skapa konto</h1>
+        <p className="subtitle">Registrera dig som låntagare</p>
 
         {error && (
-          <div className="error" role="alert" data-testid="login-error">
+          <div className="error" role="alert" data-testid="register-error">
             {error}
           </div>
         )}
@@ -47,36 +45,26 @@ export default function LoginPage() {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
-            data-testid="username"
+            data-testid="reg-username"
           />
         </label>
         <label>
-          Lösenord
+          Lösenord (minst 6 tecken)
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            data-testid="password"
+            autoComplete="new-password"
+            data-testid="reg-password"
           />
         </label>
 
-        <button type="submit" disabled={busy} data-testid="login-submit">
-          {busy ? 'Loggar in…' : 'Logga in'}
+        <button type="submit" disabled={busy} data-testid="register-submit">
+          {busy ? 'Skapar konto…' : 'Skapa konto'}
         </button>
 
-        <div className="hint">
-          <strong>Testkonton:</strong>
-          <br />
-          admin / hemligt123 (full behörighet)
-          <br />
-          handlaggare / handlaggare123 (bibliotekarie)
-          <br />
-          anvandare / anvandare123 (låntagare)
-        </div>
-
         <p className="switch-auth">
-          Ny låntagare? <Link to="/register">Skapa ett konto</Link>
+          Har du redan ett konto? <Link to="/login">Logga in</Link>
         </p>
       </form>
     </div>

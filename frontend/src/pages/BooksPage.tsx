@@ -16,6 +16,8 @@ export default function BooksPage() {
   const canCreate = hasPermission('BOOK_CREATE');
   const canUpdate = hasPermission('BOOK_UPDATE');
   const canDelete = hasPermission('BOOK_DELETE');
+  const canBorrow = hasPermission('LOAN_BORROW');
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -83,12 +85,29 @@ export default function BooksPage() {
     }
   }
 
+  async function handleBorrow(book: Book) {
+    setError(null);
+    setNotice(null);
+    try {
+      await api.post('/loans', { bookId: book.id });
+      setNotice(`Du lånade "${book.title}". Se "Mina lån".`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Kunde inte låna boken');
+    }
+  }
+
   return (
     <div>
       <h2>Böcker</h2>
       {error && (
         <div className="error" role="alert" data-testid="books-error">
           {error}
+        </div>
+      )}
+      {notice && (
+        <div className="notice" role="status" data-testid="books-notice">
+          {notice}
         </div>
       )}
 
@@ -169,6 +188,15 @@ export default function BooksPage() {
                 <td>{book.genre ?? '–'}</td>
                 <td>{book.stock ?? '–'}</td>
                 <td className="actions">
+                  {canBorrow && (
+                    <button
+                      onClick={() => handleBorrow(book)}
+                      disabled={!book.available}
+                      data-testid={`borrow-${book.id}`}
+                    >
+                      {book.available ? 'Låna' : 'Slut'}
+                    </button>
+                  )}
                   {canUpdate && (
                     <button onClick={() => startEdit(book)} data-testid={`edit-${book.id}`}>
                       Redigera

@@ -4,6 +4,7 @@ import com.apitesting.exception.UnauthorizedException;
 import com.apitesting.model.Account;
 import com.apitesting.model.LoginRequest;
 import com.apitesting.model.LoginResponse;
+import com.apitesting.model.RegisterRequest;
 import com.apitesting.security.JwtService;
 import com.apitesting.service.AccountService;
 import com.apitesting.service.AuthService;
@@ -64,6 +65,23 @@ public class AuthController {
                 permissions,
                 jwtService.getExpirationMs() / 1000);
         return ResponseEntity.ok(response);
+    }
+
+    // POST /api/auth/register - Självregistrering som låntagare (ANVANDARE)
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+        if (accountService.usernameExists(request.getUsername())) {
+            Map<String, String> error = new HashMap<>();
+            error.put("error", "Conflict");
+            error.put("message", "Användarnamnet är upptaget: " + request.getUsername());
+            return ResponseEntity.status(409).body(error);
+        }
+        Account account = accountService.register(request.getUsername(), request.getPassword());
+        Map<String, Object> response = new HashMap<>();
+        response.put("username", account.getUsername());
+        response.put("role", account.getRole().name());
+        response.put("message", "Kontot skapades – du kan nu logga in");
+        return ResponseEntity.status(201).body(response);
     }
 
     // POST /api/auth/logout - Stateless: klienten släpper sin token.

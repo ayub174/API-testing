@@ -30,11 +30,12 @@ public class AccountService {
 
     @PostConstruct
     public void initData() {
-        seed("admin", "hemligt123", Role.ADMIN);
-        seed("handlaggare", "handlaggare123", Role.HANDLAGGARE);
+        create("admin", "hemligt123", Role.ADMIN);
+        create("handlaggare", "handlaggare123", Role.HANDLAGGARE);
+        create("anvandare", "anvandare123", Role.ANVANDARE);
     }
 
-    private void seed(String username, String rawPassword, Role role) {
+    private Account create(String username, String rawPassword, Role role) {
         Account account = new Account(
                 idCounter.getAndIncrement(),
                 username,
@@ -42,6 +43,31 @@ public class AccountService {
                 role
         );
         accounts.put(username, account);
+        return account;
+    }
+
+    public boolean usernameExists(String username) {
+        return accounts.containsKey(username);
+    }
+
+    /** Självregistrering – skapar alltid ett ANVANDARE-konto (låntagare). */
+    public Account register(String username, String rawPassword) {
+        return createAccount(username, rawPassword, Role.ANVANDARE);
+    }
+
+    /** Admin skapar ett konto med valfri roll. */
+    public Account createAccount(String username, String rawPassword, Role role) {
+        if (usernameExists(username)) {
+            throw new IllegalStateException("Användarnamnet '" + username + "' är upptaget");
+        }
+        return create(username, rawPassword, role);
+    }
+
+    public void deleteAccount(String username) {
+        if (!accounts.containsKey(username)) {
+            throw new ResourceNotFoundException("Kontot '" + username + "' hittades inte");
+        }
+        accounts.remove(username);
     }
 
     public Account findByUsername(String username) {

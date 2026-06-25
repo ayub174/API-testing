@@ -1,6 +1,6 @@
 # API Testing Practice – Fullstack-träningsprojekt
 
-En träningssandlåda för dig som vill öva på **API-testning**, **Playwright-tester** och **fullstack-utveckling** (Java Spring backend + TypeScript/React frontend). Applikationen är ett enkelt boksystem med inloggning, roller och granulär behörighetshantering.
+En träningssandlåda för dig som vill öva på **API-testning**, **Playwright-tester** och **fullstack-utveckling** (Java Spring backend + TypeScript/React frontend). Applikationen är ett enkelt **bibliotekssystem**: låntagare söker och lånar böcker, bibliotekarier (handläggare) sköter katalog och lånedisk, och admin styr konton och behörigheter – med inloggning, tre roller och granulär behörighetshantering.
 
 Tanken är att du ska kunna:
 - öva på **API-tester** (Postman + JWT, roller, 401/403)
@@ -71,24 +71,37 @@ npm run dev
 
 Inloggning sker numera mot **Spring Security + JWT**. `POST /api/auth/login` returnerar en JWT i fältet `token` som ska skickas med som `Authorization: Bearer <token>`.
 
+### De tre rollerna
+
+- **ANVANDARE** (låntagare) – söker böcker, lånar och återlämnar, ser sina egna lån.
+- **HANDLAGGARE** (bibliotekarie) – sköter katalog och lager, ser alla lån och hanterar lånedisken (lånar/återlämnar åt låntagare).
+- **ADMIN** – full kontroll: personalkonton, roller/behörigheter och permanent borttagning av böcker.
+
 ### Testkonton (seedas vid uppstart)
 
-| Användarnamn | Lösenord | Roll | Behörigheter |
-|--------------|----------|------|--------------|
-| `admin` | `hemligt123` | `ADMIN` | alla |
-| `handlaggare` | `handlaggare123` | `HANDLAGGARE` | `BOOK_READ`, `BOOK_CREATE`, `BOOK_UPDATE`, `USER_READ` |
+| Användarnamn | Lösenord | Roll |
+|--------------|----------|------|
+| `admin` | `hemligt123` | `ADMIN` |
+| `handlaggare` | `handlaggare123` | `HANDLAGGARE` |
+| `anvandare` | `anvandare123` | `ANVANDARE` |
 
 ### Behörigheter (authorities)
 
-| Behörighet | Ger rätt att |
-|------------|--------------|
-| `BOOK_READ` | läsa böcker |
-| `BOOK_CREATE` | skapa böcker |
-| `BOOK_UPDATE` | uppdatera böcker (PUT/PATCH) |
-| `BOOK_DELETE` | ta bort böcker |
-| `USER_READ` | läsa användarlistan |
-| `USER_MANAGE` | uppdatera/ta bort användare |
-| `PERMISSION_MANAGE` | administrera behörigheter (admin-vyn) |
+| Behörighet | Ger rätt att | ANVANDARE | HANDLAGGARE | ADMIN |
+|------------|--------------|:---:|:---:|:---:|
+| `BOOK_READ` | söka/läsa böcker | ✅ | ✅ | ✅ |
+| `BOOK_CREATE` | skapa böcker | | ✅ | ✅ |
+| `BOOK_UPDATE` | uppdatera böcker (PUT/PATCH) | | ✅ | ✅ |
+| `BOOK_DELETE` | ta bort böcker | | | ✅ |
+| `LOAN_BORROW` | låna en bok åt sig själv | ✅ | ✅ | ✅ |
+| `LOAN_RETURN` | återlämna sitt eget lån | ✅ | ✅ | ✅ |
+| `LOAN_VIEW_OWN` | se sina egna lån | ✅ | ✅ | ✅ |
+| `LOAN_VIEW_ALL` | se alla lån | | ✅ | ✅ |
+| `LOAN_MANAGE` | låna/återlämna åt en låntagare | | ✅ | ✅ |
+| `USER_READ` | läsa användarlistan | | ✅ | ✅ |
+| `USER_MANAGE` | uppdatera/ta bort användare | | ✅ | ✅ |
+| `ACCOUNT_MANAGE` | skapa/ta bort inloggningskonton | | | ✅ |
+| `PERMISSION_MANAGE` | hantera roller och behörigheter | | | ✅ |
 
 En **admin** kan i admin-vyn (eller via `/api/admin`-endpoints) **lägga till och ta bort** enskilda behörigheter per konto, och byta roll. Ändringar slår igenom **direkt** – behörigheten kontrolleras live vid varje anrop, inte bara mot token-innehållet.
 
@@ -102,6 +115,7 @@ Bas-URL: `http://localhost:8080`
 
 | Metod | Endpoint | Behörighet | Beskrivning |
 |-------|----------|------------|-------------|
+| POST | `/api/auth/register` | öppen | Självregistrering som låntagare (skapar ett `ANVANDARE`-konto) |
 | POST | `/api/auth/login` | öppen | Logga in, returnerar JWT + roll + behörigheter |
 | POST | `/api/auth/logout` | öppen | Stateless – klienten släpper sin token |
 | GET | `/api/auth/me` | inloggad | Info om inloggad användare |
@@ -118,19 +132,35 @@ Bas-URL: `http://localhost:8080`
 | PUT / PATCH | `/api/books/{id}` | `BOOK_UPDATE` |
 | DELETE | `/api/books/{id}` | `BOOK_DELETE` |
 
-### Användare
+### Lån
+
+Ett lån kopplas till låntagarens inloggningskonto. Vid utlåning minskar bokens lagersaldo och ett **förfallodatum** sätts (utlåningsdag + 14 dagar); vid återlämning ökar saldot igen. Ett aktivt lån vars förfallodatum passerat markeras som **försenat**.
+
+| Metod | Endpoint | Behörighet | Beskrivning |
+|-------|----------|------------|-------------|
+| POST | `/api/loans` (body `{bookId}`) | `LOAN_BORROW` | Låna en tillgänglig bok åt sig själv |
+| POST | `/api/loans/borrow-for` (body `{bookId, username}`) | `LOAN_MANAGE` | Personal lånar åt en låntagare |
+| GET | `/api/loans/me` | `LOAN_VIEW_OWN` | Mina lån |
+| GET | `/api/loans` (`?active=true`, `?overdue=true`) | `LOAN_VIEW_ALL` | Alla lån (personal) |
+| POST | `/api/loans/{id}/return` | `LOAN_RETURN` eller `LOAN_MANAGE` | Återlämna (eget lån, eller åt någon som personal) |
+
+> En otillgänglig bok (lagersaldo 0) ger **409 Conflict** vid lån.
+
+### Användare (demo-CRUD-resurs)
 
 | Metod | Endpoint | Behörighet |
 |-------|----------|------------|
 | GET | `/api/users`, `/api/users/{id}` | `USER_READ` |
-| POST | `/api/users` | öppen (självregistrering) |
+| POST | `/api/users` | öppen |
 | PUT / DELETE | `/api/users/{id}` | `USER_MANAGE` |
 
-### Admin – behörighetshantering
+### Admin – konto- & behörighetshantering
 
 | Metod | Endpoint | Behörighet |
 |-------|----------|------------|
-| GET | `/api/admin/accounts` | `PERMISSION_MANAGE` |
+| GET | `/api/admin/accounts` | `ACCOUNT_MANAGE` eller `PERMISSION_MANAGE` |
+| POST | `/api/admin/accounts` (body `{username, password, role}`) | `ACCOUNT_MANAGE` |
+| DELETE | `/api/admin/accounts/{username}` | `ACCOUNT_MANAGE` |
 | POST | `/api/admin/accounts/{username}/permissions/{permission}` | `PERMISSION_MANAGE` |
 | DELETE | `/api/admin/accounts/{username}/permissions/{permission}` | `PERMISSION_MANAGE` |
 | PUT | `/api/admin/accounts/{username}/role` | `PERMISSION_MANAGE` |
@@ -143,10 +173,12 @@ Bas-URL: `http://localhost:8080`
 ## Frontend
 
 React-appen i `frontend/` har:
-- **Login-sida** med de två testkontona som hint.
-- **Böcker** – lista samt skapa/redigera/ta bort. Knapparna visas **villkorligt** utifrån dina behörigheter (en handläggare ser t.ex. ingen *Ta bort*-knapp).
+- **Login** med testkontona som hint, och **Registrering** för nya låntagare.
+- **Böcker** – sök/lista. En låntagare ser en **Låna**-knapp på tillgängliga böcker; personal ser dessutom skapa/redigera/ta bort. Knapparna visas **villkorligt** utifrån dina behörigheter.
+- **Mina lån** – egna lån med status (aktiv/försenad/återlämnad) och **Återlämna**-knapp.
+- **Alla lån** (personal) – alla lån med filter (aktiva/försenade) och möjlighet att registrera återlämning.
 - **Användare** – lista, samt ta bort om du har `USER_MANAGE`.
-- **Admin** – tabell med konton × behörigheter (kryssrutor) och roll-väljare. Endast synlig med `PERMISSION_MANAGE`.
+- **Admin** – skapa/ta bort konton samt tabell med konton × behörigheter (kryssrutor) och roll-väljare.
 
 Behörighetsstyrningen i UI:t är en bekvämlighet – backend gör alltid den verkliga kontrollen (försök gärna anropa en skyddad endpoint direkt och se 403:an).
 
@@ -156,7 +188,7 @@ Behörighetsstyrningen i UI:t är en bekvämlighet – backend gör alltid den v
 ```bash
 mvn test
 ```
-Se `src/test/java/com/apitesting/AuthIntegrationTest.java` för exempel på login (200), fel lösen (401), saknad behörighet (403) och live-behörighetsändring.
+Se `AuthIntegrationTest.java` (login/401/403/live-behörighet) och `LoanIntegrationTest.java` (lån, lagersaldo, förfallodatum, 409 vid otillgänglig bok, självregistrering, kontohantering) under `src/test/java/com/apitesting/`.
 
 ### Frontend – komponenttester (Vitest + Testing Library)
 ```bash
@@ -169,30 +201,33 @@ npm test
 cd frontend
 npm run e2e
 ```
-Playwright startar automatiskt både backend och frontend (se `frontend/playwright.config.ts`). Specarna ligger i `frontend/e2e/` och täcker inloggning, behörighetsstyrt UI och bok-CRUD.
+Playwright startar automatiskt både backend och frontend (se `frontend/playwright.config.ts`). Specarna ligger i `frontend/e2e/` och täcker inloggning, behörighetsstyrt UI, bok-CRUD samt låneflödet (låna/återlämna och registrering).
 
 ## Postman
 
 I `postman/` finns en collection och en environment. Importera båda i Postman och välj miljön **"API Testing Practice - Local"**.
 
-> **Viktigt (ändring):** bok-endpoints kräver nu inloggning. Collectionen har ett **pre-request-script på collection-nivå** som automatiskt loggar in som admin och fyller `{{token}}`, så att alla requests fungerar oavsett ordning i Collection Runner. Mappen **"5. Behörigheter & roller"** visar 403-fallen och admin-endpointsen.
+> **Viktigt (ändring):** bok-endpoints kräver nu inloggning. Collectionen har ett **pre-request-script på collection-nivå** som automatiskt loggar in som admin och fyller `{{token}}`, så att alla requests fungerar oavsett ordning i Collection Runner. Mappen **"5. Behörigheter & roller"** visar 403-fallen och admin-endpointsen, och **"6. Lån"** går igenom hela låneflödet (registrera → logga in → låna → mina lån → återlämna, plus 403/409-fall).
 
 ## Övningar
 
 ### API & Postman
-1. Logga in som `admin` respektive `handlaggare` och jämför `permissions` i svaret.
-2. Försök `DELETE /api/books/1` som handläggare → förvänta **403**. Som admin → **204**.
-3. Anropa en skyddad endpoint utan token → **401**.
-4. Ge handläggaren `BOOK_DELETE` via `POST /api/admin/.../permissions/BOOK_DELETE` och se att samma token nu får ta bort böcker.
+1. Registrera ett nytt låntagarkonto med `POST /api/auth/register`, logga in och jämför `permissions` med `admin`/`handlaggare`.
+2. Låna en bok (`POST /api/loans`), kontrollera att bokens `stock` minskar, och återlämna (`POST /api/loans/{id}/return`).
+3. Försök låna en slutsåld bok (id 4) → förvänta **409**. Försök se alla lån som låntagare (`GET /api/loans`) → **403**.
+4. Försök `DELETE /api/books/1` som handläggare → **403**. Som admin → **204**.
+5. Ge handläggaren `BOOK_DELETE` via `POST /api/admin/.../permissions/BOOK_DELETE` och se att samma token nu får ta bort böcker.
 
 ### Fullstack-utveckling (bygg vidare)
-- **Backend:** lägg till en ny behörighet (t.ex. `BOOK_EXPORT`) och en endpoint som kräver den.
+- **Backend:** lägg till en lånegräns (max antal samtidiga lån per användare) och returnera **409** när gränsen nås.
+- **Backend:** lägg till ett "förseningsavgift"-fält som räknas ut från `dueDate` vid återlämning.
 - **Frontend:** lägg till sök/filter-fält på Böcker-sidan som använder query-parametrarna.
-- **Frontend:** visa ett tydligt felmeddelande (toast) när ett 403 inträffar.
+- **Frontend:** visa ett tydligt felmeddelande (toast) när ett 403/409 inträffar.
 
 ### Övningskrokar / kända begränsningar (`// TODO (övning)` i koden)
 - **Stateless logout:** `POST /api/auth/logout` invaliderar inte JWT:n på serversidan. *Övning:* implementera en denylist över utloggade tokens.
 - **Rollbyte nollställer behörigheter:** `AccountService.changeRole` återställer behörigheterna till rollens standard. *Övning:* bestäm önskat beteende och ändra det.
+- **Fast lånetid:** `LoanService.LOAN_PERIOD_DAYS` är hårdkodad till 14 dagar. *Övning:* gör den konfigurerbar via `application.properties`.
 - **JWT-hemlighet i klartext:** `app.jwt.secret` ligger i `application.properties`. *Övning:* flytta till en miljövariabel.
 
 ## Projektstruktur
@@ -208,23 +243,23 @@ API-testing/
 │   ├── main/java/com/apitesting/
 │   │   ├── ApiTestingApplication.java
 │   │   ├── config/        (SecurityConfig)
-│   │   ├── controller/    (Book, User, Auth, Admin, Status)
-│   │   ├── model/         (Book, User, Account, AccountResponse, Login*, ErrorResponse)
+│   │   ├── controller/    (Book, User, Auth, Admin, Loan, Status)
+│   │   ├── model/         (Book, User, Account, Loan, *Request, *Response, ErrorResponse)
 │   │   ├── security/      (Role, Permission, JwtService, JwtAuthenticationFilter,
 │   │   │                   CustomUserDetailsService, Rest*EntryPoint/Handler)
-│   │   ├── service/       (BookService, UserService, AccountService, AuthService)
+│   │   ├── service/       (BookService, UserService, AccountService, LoanService, AuthService)
 │   │   └── exception/     (GlobalExceptionHandler m.fl.)
 │   ├── main/resources/application.properties
-│   └── test/java/com/apitesting/ (ApiTestingApplicationTests, AuthIntegrationTest)
+│   └── test/java/com/apitesting/ (ApiTestingApplicationTests, AuthIntegrationTest, LoanIntegrationTest)
 └── frontend/
     ├── package.json, vite.config.ts, tsconfig*.json, playwright.config.ts
     ├── src/
     │   ├── api/client.ts          (fetch-wrapper, Bearer, 401/403)
     │   ├── auth/                  (AuthContext, ProtectedRoute)
     │   ├── components/            (ProtectedLayout)
-    │   ├── pages/                 (Login, Books, Users, Admin)
+    │   ├── pages/                 (Login, Register, Books, MyLoans, AllLoans, Users, Admin)
     │   └── types.ts
-    └── e2e/                       (auth, permissions, books-crud specs)
+    └── e2e/                       (auth, permissions, books-crud, loans specs)
 ```
 
 ## Felsökning

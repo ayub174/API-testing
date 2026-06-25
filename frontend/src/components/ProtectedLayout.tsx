@@ -17,8 +17,12 @@ export default function ProtectedLayout() {
         <nav className="nav">
           <span className="brand">📚 Boksystem</span>
           <NavLink to="/books">Böcker</NavLink>
+          {hasPermission('LOAN_VIEW_OWN') && <NavLink to="/loans">Mina lån</NavLink>}
+          {hasPermission('LOAN_VIEW_ALL') && <NavLink to="/all-loans">Alla lån</NavLink>}
           {hasPermission('USER_READ') && <NavLink to="/users">Användare</NavLink>}
-          {hasPermission('PERMISSION_MANAGE') && <NavLink to="/admin">Admin</NavLink>}
+          {(hasPermission('PERMISSION_MANAGE') || hasPermission('ACCOUNT_MANAGE')) && (
+            <NavLink to="/admin">Admin</NavLink>
+          )}
         </nav>
         <div className="user-box">
           <span className="user-name" data-testid="current-user">

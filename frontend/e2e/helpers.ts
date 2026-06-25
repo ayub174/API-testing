@@ -16,3 +16,8 @@ export async function loginAsHandlaggare(page: Page) {
   await login(page, 'handlaggare', 'handlaggare123');
   await expect(page.getByTestId('books-table')).toBeVisible();
 }
+
+export async function loginAsAnvandare(page: Page) {
+  await login(page, 'anvandare', 'anvandare123');
+  await expect(page.getByTestId('books-table')).toBeVisible();
+}

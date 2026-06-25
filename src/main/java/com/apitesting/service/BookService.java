@@ -105,6 +105,21 @@ public class BookService {
         return existing;
     }
 
+    /**
+     * Justerar lagersaldot (t.ex. -1 vid utlåning, +1 vid återlämning).
+     * Kastar om saldot skulle bli negativt.
+     */
+    public Book adjustStock(Long id, int delta) {
+        Book book = findById(id);
+        int current = book.getStock() == null ? 0 : book.getStock();
+        int updated = current + delta;
+        if (updated < 0) {
+            throw new IllegalStateException("Lagersaldo kan inte bli negativt för bok " + id);
+        }
+        book.setStock(updated);
+        return book;
+    }
+
     public void delete(Long id) {
         if (!books.containsKey(id)) {
             throw new ResourceNotFoundException("Boken med id " + id + " hittades inte");

@@ -3,11 +3,17 @@ export type Permission =
   | 'BOOK_CREATE'
   | 'BOOK_UPDATE'
   | 'BOOK_DELETE'
+  | 'LOAN_BORROW'
+  | 'LOAN_RETURN'
+  | 'LOAN_VIEW_OWN'
+  | 'LOAN_VIEW_ALL'
+  | 'LOAN_MANAGE'
   | 'USER_READ'
   | 'USER_MANAGE'
+  | 'ACCOUNT_MANAGE'
   | 'PERMISSION_MANAGE';
 
-export type Role = 'ADMIN' | 'HANDLAGGARE';
+export type Role = 'ADMIN' | 'HANDLAGGARE' | 'ANVANDARE';
 
 export interface LoginResponse {
   token: string;
@@ -45,4 +51,16 @@ export interface Account {
   username: string;
   role: Role;
   permissions: Permission[];
+}
+
+export interface Loan {
+  id: number;
+  bookId: number;
+  bookTitle: string;
+  username: string;
+  borrowedAt: string;
+  dueDate: string;
+  returnedAt: string | null;
+  returned: boolean;
+  overdue: boolean;
 }
