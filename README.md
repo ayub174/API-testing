@@ -136,7 +136,7 @@ Bas-URL: `http://localhost:8080`
 
 ### Lån
 
-Ett lån kopplas till låntagarens inloggningskonto. Vid utlåning minskar bokens lagersaldo och ett **förfallodatum** sätts (utlåningsdag + 14 dagar); vid återlämning ökar saldot igen. Ett aktivt lån vars förfallodatum passerat markeras som **försenat**.
+Ett lån kopplas till låntagarens inloggningskonto. Vid utlåning minskar bokens lagersaldo och ett **förfallodatum** sätts (utlåningsdag + 14 dagar); vid återlämning ökar saldot igen. Ett aktivt lån vars förfallodatum passerat markeras som **försenat**. En användare får ha högst **3 aktiva lån** samtidigt.
 
 | Metod | Endpoint | Behörighet | Beskrivning |
 |-------|----------|------------|-------------|
@@ -146,7 +146,7 @@ Ett lån kopplas till låntagarens inloggningskonto. Vid utlåning minskar boken
 | GET | `/api/loans` (`?active=true`, `?overdue=true`) | `LOAN_VIEW_ALL` | Alla lån (personal) |
 | POST | `/api/loans/{id}/return` | `LOAN_RETURN` eller `LOAN_MANAGE` | Återlämna (eget lån, eller åt någon som personal) |
 
-> En otillgänglig bok (lagersaldo 0) ger **409 Conflict** vid lån.
+> En otillgänglig bok (lagersaldo 0) **eller** en nådd lånegräns (3 aktiva lån) ger **409 Conflict**.
 
 ### Användare (demo-CRUD-resurs)
 
@@ -221,8 +221,8 @@ I `postman/` finns en collection och en environment. Importera båda i Postman o
 5. Ge handläggaren `BOOK_DELETE` via `POST /api/admin/.../permissions/BOOK_DELETE` och se att samma token nu får ta bort böcker.
 
 ### Fullstack-utveckling (bygg vidare)
-- **Backend:** lägg till en lånegräns (max antal samtidiga lån per användare) och returnera **409** när gränsen nås.
 - **Backend:** lägg till ett "förseningsavgift"-fält som räknas ut från `dueDate` vid återlämning.
+- **Backend:** gör lånegränsen (`LoanService.MAX_ACTIVE_LOANS`) och lånetiden konfigurerbara via `application.properties`.
 - **Frontend:** lägg till sök/filter-fält på Böcker-sidan som använder query-parametrarna.
 - **Frontend:** visa ett tydligt felmeddelande (toast) när ett 403/409 inträffar.
 

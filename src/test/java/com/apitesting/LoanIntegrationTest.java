@@ -71,6 +71,33 @@ class LoanIntegrationTest {
     }
 
     @Test
+    void borrowLimitIsEnforced() throws Exception {
+        // Eget konto så testet inte påverkas av andra testers lån.
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"limituser\",\"password\":\"hemligt\"}"))
+                .andExpect(status().isCreated());
+        String token = login("limituser", "hemligt");
+
+        // Bok 1 har gott om lager, så det är lånegränsen (inte lagret) som testas.
+        // Tre aktiva lån är tillåtna.
+        for (int i = 0; i < 3; i++) {
+            mockMvc.perform(post("/api/loans")
+                            .header("Authorization", "Bearer " + token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"bookId\":1}"))
+                    .andExpect(status().isCreated());
+        }
+
+        // Ett fjärde aktivt lån nekas med 409.
+        mockMvc.perform(post("/api/loans")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bookId\":1}"))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void borrowingUnavailableBookReturns409() throws Exception {
         String token = login("anvandare", "anvandare123");
         // Bok 4 ("1984") seedas med lagersaldo 0.

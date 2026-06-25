@@ -24,6 +24,9 @@ public class LoanService {
     /** Lånetid i dagar. TODO (övning): gör konfigurerbar via application.properties. */
     static final int LOAN_PERIOD_DAYS = 14;
 
+    /** Max antal samtidigt aktiva (ej återlämnade) lån per användare. */
+    static final int MAX_ACTIVE_LOANS = 3;
+
     private final ConcurrentHashMap<Long, Loan> loans = new ConcurrentHashMap<>();
     private final AtomicLong idCounter = new AtomicLong(1);
     private final BookService bookService;
@@ -32,11 +35,15 @@ public class LoanService {
         this.bookService = bookService;
     }
 
-    /** Lånar ut en bok till en användare om den finns i lager. */
+    /** Lånar ut en bok till en användare om den finns i lager och lånegränsen inte är nådd. */
     public synchronized Loan borrow(Long bookId, String username) {
         Book book = bookService.findById(bookId); // kastar 404 om boken saknas
         if (book.getStock() == null || book.getStock() <= 0) {
             throw new IllegalStateException("Boken '" + book.getTitle() + "' är inte tillgänglig för utlåning");
+        }
+        if (countActiveLoans(username) >= MAX_ACTIVE_LOANS) {
+            throw new IllegalStateException(
+                    "Lånegränsen är nådd (max " + MAX_ACTIVE_LOANS + " aktiva lån per användare)");
         }
         bookService.adjustStock(bookId, -1);
         Loan loan = new Loan(
@@ -74,6 +81,12 @@ public class LoanService {
             throw new ResourceNotFoundException("Lånet med id " + id + " hittades inte");
         }
         return loan;
+    }
+
+    public long countActiveLoans(String username) {
+        return loans.values().stream()
+                .filter(l -> l.getUsername().equals(username) && !l.isReturned())
+                .count();
     }
 
     public List<Loan> findByUsername(String username) {

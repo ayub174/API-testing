@@ -38,9 +38,16 @@ export default function MyLoansPage() {
     }
   }
 
+  const activeCount = loans.filter((l) => !l.returned).length;
+
   return (
     <div>
       <h2>Mina lån</h2>
+      {!loading && loans.length > 0 && (
+        <p className="muted" data-testid="active-count">
+          Aktiva lån: {activeCount} av högst 3.
+        </p>
+      )}
       {error && (
         <div className="error" role="alert" data-testid="loans-error">
           {error}
