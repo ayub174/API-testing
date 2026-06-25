@@ -1,9 +1,34 @@
 {
   "info": {
     "name": "API Testing Practice",
-    "description": "Övningssamling för API-testning. Innehåller exempel för alla HTTP-metoder, autentisering, validering, statuskoder och Postman-tester.",
+    "description": "Övningssamling för API-testning. Innehåller exempel för alla HTTP-metoder, autentisering (JWT), roller/behörigheter, validering, statuskoder och Postman-tester.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// Logga in automatiskt som admin om token saknas. Detta gör att t.ex.",
+          "// bok-endpoints (som nu kräver behörigheten BOOK_READ) fungerar oavsett",
+          "// i vilken ordning requesterna körs i Collection Runner.",
+          "if (!pm.collectionVariables.get('token')) {",
+          "    pm.sendRequest({",
+          "        url: pm.collectionVariables.get('baseUrl') + '/api/auth/login',",
+          "        method: 'POST',",
+          "        header: { 'Content-Type': 'application/json' },",
+          "        body: { mode: 'raw', raw: JSON.stringify({ username: 'admin', password: 'hemligt123' }) }",
+          "    }, function (err, res) {",
+          "        if (!err && res.code === 200) {",
+          "            pm.collectionVariables.set('token', res.json().token);",
+          "        }",
+          "    });",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ],
   "variable": [
     {
       "key": "baseUrl",
@@ -16,6 +41,11 @@
       "type": "string"
     },
     {
+      "key": "handlaggareToken",
+      "value": "",
+      "type": "string"
+    },
+    {
       "key": "bookId",
       "value": "1",
       "type": "string"
@@ -24,6 +54,7 @@
   "item": [
     {
       "name": "1. Books - CRUD",
+      "description": "OBS: bok-endpoints kräver nu inloggning (behörigheten BOOK_READ för läsning, BOOK_CREATE/UPDATE/DELETE för ändringar). Collectionens pre-request loggar automatiskt in som admin.",
       "item": [
         {
           "name": "GET - Hämta alla böcker",
@@ -58,7 +89,9 @@
           ],
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/books",
               "host": ["{{baseUrl}}"],
@@ -90,7 +123,9 @@
           ],
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/books?genre=Programming&sortBy=price",
               "host": ["{{baseUrl}}"],
@@ -127,7 +162,9 @@
           ],
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/books/{{bookId}}",
               "host": ["{{baseUrl}}"],
@@ -157,7 +194,9 @@
           ],
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/books/9999",
               "host": ["{{baseUrl}}"],
@@ -197,7 +236,8 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "body": {
               "mode": "raw",
@@ -234,7 +274,8 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "body": {
               "mode": "raw",
@@ -271,7 +312,8 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "body": {
               "mode": "raw",
@@ -307,7 +349,8 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "body": {
               "mode": "raw",
@@ -341,7 +384,9 @@
           ],
           "request": {
             "method": "DELETE",
-            "header": [],
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/books/{{bookId}}",
               "host": ["{{baseUrl}}"],
@@ -365,10 +410,12 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test('Svaret innehåller en token', function () {",
+                  "pm.test('Svaret innehåller en token, roll och behörigheter', function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData.token).to.be.a('string');",
                   "    pm.expect(jsonData.token).to.not.be.empty;",
+                  "    pm.expect(jsonData.role).to.equal('ADMIN');",
+                  "    pm.expect(jsonData.permissions).to.be.an('array');",
                   "});",
                   "",
                   "// Spara token automatiskt i collection-variabeln",
@@ -437,9 +484,11 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test('Användaren är autentiserad', function () {",
+                  "pm.test('Svaret innehåller roll och behörigheter', function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData.authenticated).to.equal(true);",
+                  "    pm.expect(jsonData.role).to.be.a('string');",
+                  "    pm.expect(jsonData.permissions).to.be.an('array');",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -660,6 +709,209 @@
               "raw": "{{baseUrl}}/api/status/echo",
               "host": ["{{baseUrl}}"],
               "path": ["api", "status", "echo"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Behörigheter & roller",
+      "description": "Visar skillnaden mellan ADMIN och HANDLÄGGARE samt admin-endpoints för att lägga till/ta bort behörigheter. Kör requesterna uppifrån och ned.",
+      "item": [
+        {
+          "name": "POST - Login som handläggare",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Rollen är HANDLAGGARE och saknar BOOK_DELETE', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.role).to.equal('HANDLAGGARE');",
+                  "    pm.expect(jsonData.permissions).to.not.include('BOOK_DELETE');",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.collectionVariables.set('handlaggareToken', jsonData.token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"handlaggare\",\n  \"password\": \"handlaggare123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "DELETE - Bok som handläggare (403 Forbidden)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 403', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "",
+                  "pm.test('Felmeddelandet handlar om behörighet', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.message).to.include('behörighet');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{handlaggareToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/books/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "books", "1"]
+            }
+          }
+        },
+        {
+          "name": "GET - Admin-konton som handläggare (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 403', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{handlaggareToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "accounts"]
+            }
+          }
+        },
+        {
+          "name": "GET - Admin-konton som admin (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Svaret är en lista med konton', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.be.an('array');",
+                  "    pm.expect(jsonData.length).to.be.above(0);",
+                  "    pm.expect(jsonData[0]).to.have.property('permissions');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "accounts"]
+            }
+          }
+        },
+        {
+          "name": "POST - Ge handläggare BOOK_DELETE (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Handläggaren har nu BOOK_DELETE', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.permissions).to.include('BOOK_DELETE');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/accounts/handlaggare/permissions/BOOK_DELETE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "accounts", "handlaggare", "permissions", "BOOK_DELETE"]
+            }
+          }
+        },
+        {
+          "name": "DELETE - Ta bort behörighet igen (admin, städa upp)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status är 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('BOOK_DELETE är borttagen igen', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.permissions).to.not.include('BOOK_DELETE');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/accounts/handlaggare/permissions/BOOK_DELETE",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "accounts", "handlaggare", "permissions", "BOOK_DELETE"]
             }
           }
         }

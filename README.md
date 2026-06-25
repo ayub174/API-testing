@@ -1,260 +1,199 @@
-# API Testing Practice
+# API Testing Practice – Fullstack-träningsprojekt
 
-Ett övningsprojekt för dig som vill lära dig grunderna i API-testning med **Postman**. Projektet är en Spring Boot-applikation som simulerar en bokhandel. Den exponerar ett REST-API med endpoints för CRUD, autentisering, validering, query-parametrar, olika statuskoder och olika content-types.
+En träningssandlåda för dig som vill öva på **API-testning**, **Playwright-tester** och **fullstack-utveckling** (Java Spring backend + TypeScript/React frontend). Applikationen är ett enkelt boksystem med inloggning, roller och granulär behörighetshantering.
+
+Tanken är att du ska kunna:
+- öva på **API-tester** (Postman + JWT, roller, 401/403)
+- öva på **Playwright** end-to-end-tester mot ett riktigt UI
+- **bygga vidare** på funktionalitet och **rätta buggar** i både backend och frontend
 
 ## Innehåll
 
+- [Arkitektur](#arkitektur)
 - [Förutsättningar](#förutsättningar)
 - [Komma igång](#komma-igång)
-- [Importera Postman-collection](#importera-postman-collection)
+- [Inloggning, roller & behörigheter](#inloggning-roller--behörigheter)
 - [API-översikt](#api-översikt)
+- [Frontend](#frontend)
+- [Testning](#testning)
+- [Postman](#postman)
 - [Övningar](#övningar)
-- [Postman-tester (test-script)](#postman-tester-test-script)
+- [Projektstruktur](#projektstruktur)
 - [Felsökning](#felsökning)
+
+## Arkitektur
+
+| Lager | Teknik | Plats | Port |
+|-------|--------|-------|------|
+| Backend | Java 17, Spring Boot 3.2, Spring Security, JWT (jjwt) | `src/` | 8080 |
+| Frontend | TypeScript, React 18, Vite, React Router | `frontend/` | 5173 |
+| API-tester | Postman-collection | `postman/` | – |
+| E2E-tester | Playwright | `frontend/e2e/` | – |
+
+All data ligger **i minnet** och återställs vid varje omstart av backend – du börjar alltid från ett känt utgångsläge.
 
 ## Förutsättningar
 
-- **Java 17** eller senare ([ladda ner Adoptium](https://adoptium.net/))
-- **Maven 3.8+** (eller använd Maven Wrapper om du föredrar det)
-- **Postman** ([ladda ner](https://www.postman.com/downloads/))
-
-Kontrollera att Java fungerar:
-```bash
-java -version
-```
+- **Java 17+** ([Adoptium](https://adoptium.net/))
+- **Maven 3.8+**
+- **Node.js 18+** (för frontend och Playwright)
+- **Postman** (valfritt, för API-övningarna)
 
 ## Komma igång
 
-1. Klona/öppna projektet och gå in i mappen:
-   ```bash
-   cd API-testing
-   ```
+### 1. Starta backend
 
-2. Bygg och starta applikationen:
-   ```bash
-   mvn spring-boot:run
-   ```
+```bash
+mvn spring-boot:run
+```
 
-3. När du ser `Started ApiTestingApplication` i loggen är API:et igång på `http://localhost:8080`.
+När du ser `Started ApiTestingApplication` är API:et igång på `http://localhost:8080`.
 
-4. Testa snabbt med curl:
-   ```bash
-   curl http://localhost:8080/api/status/health
-   curl http://localhost:8080/api/books
-   ```
+Snabbtest:
+```bash
+curl http://localhost:8080/api/status/health
+curl -X POST http://localhost:8080/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"hemligt123"}'
+```
 
-## Importera Postman-collection
+### 2. Starta frontend
 
-I mappen `postman/` finns två filer du kan importera direkt i Postman:
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-1. Öppna Postman
-2. Klicka på **Import** (uppe till vänster)
-3. Dra in eller välj båda filerna:
-   - `API-Testing-Practice.postman_collection.json` (alla requests + testskript)
-   - `API-Testing-Practice.postman_environment.json` (variabler för bas-URL, login etc.)
-4. Välj environment **"API Testing Practice - Local"** uppe till höger i Postman
+Öppna `http://localhost:5173` och logga in. Vite proxar `/api` vidare till backend på `:8080`.
 
-Nu kan du köra requesterna direkt. Varje request har förinställda test-script som verifierar svaret.
+## Inloggning, roller & behörigheter
+
+Inloggning sker numera mot **Spring Security + JWT**. `POST /api/auth/login` returnerar en JWT i fältet `token` som ska skickas med som `Authorization: Bearer <token>`.
+
+### Testkonton (seedas vid uppstart)
+
+| Användarnamn | Lösenord | Roll | Behörigheter |
+|--------------|----------|------|--------------|
+| `admin` | `hemligt123` | `ADMIN` | alla |
+| `handlaggare` | `handlaggare123` | `HANDLAGGARE` | `BOOK_READ`, `BOOK_CREATE`, `BOOK_UPDATE`, `USER_READ` |
+
+### Behörigheter (authorities)
+
+| Behörighet | Ger rätt att |
+|------------|--------------|
+| `BOOK_READ` | läsa böcker |
+| `BOOK_CREATE` | skapa böcker |
+| `BOOK_UPDATE` | uppdatera böcker (PUT/PATCH) |
+| `BOOK_DELETE` | ta bort böcker |
+| `USER_READ` | läsa användarlistan |
+| `USER_MANAGE` | uppdatera/ta bort användare |
+| `PERMISSION_MANAGE` | administrera behörigheter (admin-vyn) |
+
+En **admin** kan i admin-vyn (eller via `/api/admin`-endpoints) **lägga till och ta bort** enskilda behörigheter per konto, och byta roll. Ändringar slår igenom **direkt** – behörigheten kontrolleras live vid varje anrop, inte bara mot token-innehållet.
+
+> **401 vs 403:** saknad/ogiltig token ger **401 Unauthorized**. Giltig token men fel behörighet ger **403 Forbidden**.
 
 ## API-översikt
 
 Bas-URL: `http://localhost:8080`
 
-### Böcker (öppen, ingen auth)
-
-| Metod | Endpoint | Beskrivning |
-|-------|----------|-------------|
-| GET | `/api/books` | Lista alla böcker (stödjer `?genre=`, `?author=`, `?minPrice=`, `?maxPrice=`, `?sortBy=price\|title\|author`) |
-| GET | `/api/books/{id}` | Hämta en bok via id |
-| GET | `/api/books/count` | Räkna antalet böcker |
-| GET | `/api/books/search?title=` | Sök på exakt titel |
-| POST | `/api/books` | Skapa en ny bok |
-| PUT | `/api/books/{id}` | Ersätt en bok komplett |
-| PATCH | `/api/books/{id}` | Uppdatera vissa fält |
-| DELETE | `/api/books/{id}` | Ta bort en bok |
-
 ### Autentisering
 
-| Metod | Endpoint | Beskrivning |
-|-------|----------|-------------|
-| POST | `/api/auth/login` | Logga in, returnerar en token |
-| POST | `/api/auth/logout` | Logga ut (kräver Bearer token) |
-| GET | `/api/auth/me` | Hämta info om inloggad användare (Bearer token) |
-| GET | `/api/auth/basic` | Endpoint som kräver **Basic Auth** |
-| GET | `/api/auth/api-key` | Endpoint som kräver header `X-API-Key` |
+| Metod | Endpoint | Behörighet | Beskrivning |
+|-------|----------|------------|-------------|
+| POST | `/api/auth/login` | öppen | Logga in, returnerar JWT + roll + behörigheter |
+| POST | `/api/auth/logout` | öppen | Stateless – klienten släpper sin token |
+| GET | `/api/auth/me` | inloggad | Info om inloggad användare |
+| GET | `/api/auth/basic` | öppen | Övningsendpoint för **Basic Auth** |
+| GET | `/api/auth/api-key` | öppen | Övningsendpoint för header `X-API-Key` |
 
-**Inloggningsuppgifter:**
-- Användarnamn: `admin`
-- Lösenord: `hemligt123`
-- API-nyckel: `test-api-key-12345`
+### Böcker
 
-### Användare (kräver Bearer token, förutom POST)
+| Metod | Endpoint | Behörighet |
+|-------|----------|------------|
+| GET | `/api/books` (stödjer `?genre=`, `?author=`, `?minPrice=`, `?maxPrice=`, `?sortBy=`) | `BOOK_READ` |
+| GET | `/api/books/{id}`, `/count`, `/search?title=` | `BOOK_READ` |
+| POST | `/api/books` | `BOOK_CREATE` |
+| PUT / PATCH | `/api/books/{id}` | `BOOK_UPDATE` |
+| DELETE | `/api/books/{id}` | `BOOK_DELETE` |
 
-| Metod | Endpoint | Beskrivning |
-|-------|----------|-------------|
-| GET | `/api/users` | Lista alla användare |
-| GET | `/api/users/{id}` | Hämta en användare |
-| POST | `/api/users` | Registrera en ny användare |
-| PUT | `/api/users/{id}` | Uppdatera en användare |
-| DELETE | `/api/users/{id}` | Ta bort en användare |
+### Användare
 
-### Status & headers (för övning på olika svar)
+| Metod | Endpoint | Behörighet |
+|-------|----------|------------|
+| GET | `/api/users`, `/api/users/{id}` | `USER_READ` |
+| POST | `/api/users` | öppen (självregistrering) |
+| PUT / DELETE | `/api/users/{id}` | `USER_MANAGE` |
 
-| Metod | Endpoint | Beskrivning |
-|-------|----------|-------------|
-| GET | `/api/status/health` | Healthcheck (200) |
-| GET | `/api/status/{code}` | Returnerar valfri statuskod, t.ex. `/api/status/418` |
-| GET | `/api/status/delay/{sec}` | Fördröjt svar 0-10 sek (testa timeouts) |
-| GET | `/api/status/headers` | Returnerar dina request-headers |
-| GET | `/api/status/custom-headers` | Innehåller custom response-headers |
-| GET | `/api/status/xml` | Returnerar XML |
-| GET | `/api/status/text` | Returnerar plain text |
-| POST | `/api/status/echo` | Returnerar din request body |
+### Admin – behörighetshantering
+
+| Metod | Endpoint | Behörighet |
+|-------|----------|------------|
+| GET | `/api/admin/accounts` | `PERMISSION_MANAGE` |
+| POST | `/api/admin/accounts/{username}/permissions/{permission}` | `PERMISSION_MANAGE` |
+| DELETE | `/api/admin/accounts/{username}/permissions/{permission}` | `PERMISSION_MANAGE` |
+| PUT | `/api/admin/accounts/{username}/role` | `PERMISSION_MANAGE` |
+| GET | `/api/admin/permissions`, `/api/admin/roles` | `PERMISSION_MANAGE` |
+
+### Status & headers (öppna)
+
+`GET /api/status/health`, `/api/status/{code}`, `/api/status/delay/{sec}`, `/api/status/headers`, `/api/status/custom-headers`, `/api/status/xml`, `/api/status/text`, `POST /api/status/echo`.
+
+## Frontend
+
+React-appen i `frontend/` har:
+- **Login-sida** med de två testkontona som hint.
+- **Böcker** – lista samt skapa/redigera/ta bort. Knapparna visas **villkorligt** utifrån dina behörigheter (en handläggare ser t.ex. ingen *Ta bort*-knapp).
+- **Användare** – lista, samt ta bort om du har `USER_MANAGE`.
+- **Admin** – tabell med konton × behörigheter (kryssrutor) och roll-väljare. Endast synlig med `PERMISSION_MANAGE`.
+
+Behörighetsstyrningen i UI:t är en bekvämlighet – backend gör alltid den verkliga kontrollen (försök gärna anropa en skyddad endpoint direkt och se 403:an).
+
+## Testning
+
+### Backend (JUnit + MockMvc)
+```bash
+mvn test
+```
+Se `src/test/java/com/apitesting/AuthIntegrationTest.java` för exempel på login (200), fel lösen (401), saknad behörighet (403) och live-behörighetsändring.
+
+### Frontend – komponenttester (Vitest + Testing Library)
+```bash
+cd frontend
+npm test
+```
+
+### Frontend – e2e (Playwright)
+```bash
+cd frontend
+npm run e2e
+```
+Playwright startar automatiskt både backend och frontend (se `frontend/playwright.config.ts`). Specarna ligger i `frontend/e2e/` och täcker inloggning, behörighetsstyrt UI och bok-CRUD.
+
+## Postman
+
+I `postman/` finns en collection och en environment. Importera båda i Postman och välj miljön **"API Testing Practice - Local"**.
+
+> **Viktigt (ändring):** bok-endpoints kräver nu inloggning. Collectionen har ett **pre-request-script på collection-nivå** som automatiskt loggar in som admin och fyller `{{token}}`, så att alla requests fungerar oavsett ordning i Collection Runner. Mappen **"5. Behörigheter & roller"** visar 403-fallen och admin-endpointsen.
 
 ## Övningar
 
-Övningarna är ordnade från grundläggande till mer avancerade. Försök göra dem **i Postman** och skriv testscript där det är lämpligt.
+### API & Postman
+1. Logga in som `admin` respektive `handlaggare` och jämför `permissions` i svaret.
+2. Försök `DELETE /api/books/1` som handläggare → förvänta **403**. Som admin → **204**.
+3. Anropa en skyddad endpoint utan token → **401**.
+4. Ge handläggaren `BOOK_DELETE` via `POST /api/admin/.../permissions/BOOK_DELETE` och se att samma token nu får ta bort böcker.
 
-### Övning 1 - HTTP-metoderna (grunderna)
-- Skicka en `GET` till `/api/books` och inspektera svaret
-- Skicka `GET /api/books/1` - vilka fält finns på boken?
-- Skicka `POST /api/books` med en ny bok i body (Content-Type: application/json)
-- Skicka `PUT /api/books/1` och ersätt boken helt
-- Skicka `PATCH /api/books/1` och uppdatera bara priset
-- Skicka `DELETE /api/books/1`
+### Fullstack-utveckling (bygg vidare)
+- **Backend:** lägg till en ny behörighet (t.ex. `BOOK_EXPORT`) och en endpoint som kräver den.
+- **Frontend:** lägg till sök/filter-fält på Böcker-sidan som använder query-parametrarna.
+- **Frontend:** visa ett tydligt felmeddelande (toast) när ett 403 inträffar.
 
-### Övning 2 - Path- och query-parametrar
-- Hämta endast böcker i genren "Programming": `GET /api/books?genre=Programming`
-- Hämta böcker av en författare och sortera på pris: `GET /api/books?author=Tolkien&sortBy=price`
-- Kombinera flera filter: `GET /api/books?minPrice=100&maxPrice=300&sortBy=title`
-
-### Övning 3 - Statuskoder
-- Hämta en bok som inte finns: `GET /api/books/9999` → ska ge **404**
-- Skapa en bok som lyckas: `POST /api/books` → ska ge **201**
-- Ta bort en bok: `DELETE /api/books/2` → ska ge **204**
-- Pröva olika statuskoder: `GET /api/status/418`, `GET /api/status/500`
-
-### Övning 4 - Validering (400 Bad Request)
-- Skicka `POST /api/books` med tom titel, tom författare och pris = -10
-  - Inspektera fältet `details` i felsvaret - det visar exakt vilka regler som bröts
-- Skicka `POST /api/users` med en ogiltig email-adress (t.ex. "blabla")
-- Skicka felaktig JSON (t.ex. ofullständig `{"title":`) - du ska få **400**
-
-### Övning 5 - Autentisering med Bearer Token
-1. `POST /api/auth/login` med rätt användarnamn/lösenord. Spara token från svaret.
-2. Anropa `GET /api/users` med headern `Authorization: Bearer <din-token>` - ska lyckas
-3. Anropa samma endpoint utan token - ska ge **401**
-4. Använd `POST /api/auth/logout`, försök sedan använda samma token igen → **401**
-
-### Övning 6 - Basic Auth
-- I Postman, gå till fliken **Authorization** för requesten
-- Välj typ **Basic Auth** och fyll i `admin` / `hemligt123`
-- Skicka `GET /api/auth/basic`
-
-### Övning 7 - API-nyckel
-- Skicka `GET /api/auth/api-key` med headern `X-API-Key: test-api-key-12345`
-- Prova med en felaktig nyckel - ska ge 401
-
-### Övning 8 - Headers
-- Skicka `GET /api/status/headers` och se vilka headers Postman skickar
-- Skicka `GET /api/status/custom-headers` och inspektera **Response Headers** i Postman
-
-### Övning 9 - Olika content-types
-- `GET /api/status/xml` - ska returnera XML
-- `GET /api/status/text` - ska returnera plain text
-- `POST /api/status/echo` med en JSON-body - svaret ekar tillbaka din body
-
-### Övning 10 - Postman Tests (testskript)
-Skriv test-script under fliken **Tests** för en request. Exempel:
-
-```javascript
-pm.test("Status är 200", function () {
-    pm.response.to.have.status(200);
-});
-
-pm.test("Svaret är ett JSON-objekt", function () {
-    var jsonData = pm.response.json();
-    pm.expect(jsonData).to.be.an('object');
-});
-
-pm.test("Boken har en titel", function () {
-    var jsonData = pm.response.json();
-    pm.expect(jsonData.title).to.be.a('string');
-});
-
-pm.test("Response time är under 500ms", function () {
-    pm.expect(pm.response.responseTime).to.be.below(500);
-});
-```
-
-### Övning 11 - Kedja requests med variabler
-1. Skapa en bok med `POST /api/books`. I **Tests**-fliken, spara id:
-   ```javascript
-   var jsonData = pm.response.json();
-   pm.collectionVariables.set("bookId", jsonData.id);
-   ```
-2. Använd `{{bookId}}` i nästa request: `GET /api/books/{{bookId}}`
-3. Avsluta med att ta bort den: `DELETE /api/books/{{bookId}}`
-
-### Övning 12 - Collection Runner
-- Klicka på din collection → **Run**
-- Kör hela serien av requests i ordning - se alla tester gröna/röda
-- Detta är grunden för **regression testing**.
-
-### Övning 13 - Negativa tester (saker som ska gå fel)
-- Ta bort en redan borttagen bok → 404
-- Skapa en användare med email som redan finns → 409
-- Skapa en bok utan Content-Type-header (försök skicka rå text) → 400/415
-- Skicka en token efter logout → 401
-
-## Postman-tester (test-script)
-
-I `postman/API-Testing-Practice.postman_collection.json` finns redan färdiga tester för de flesta requests. När du importerat collectionen i Postman:
-
-1. Öppna en request
-2. Gå till fliken **Tests** (eller **Scripts → Post-response** i nyare Postman)
-3. Där ser du JavaScript-koden som körs efter svaret
-
-Vanliga assertions att lära sig:
-
-```javascript
-// Statuskod
-pm.test("Status är 200", () => pm.response.to.have.status(200));
-
-// Response time
-pm.test("Snabbt svar", () => pm.expect(pm.response.responseTime).to.be.below(1000));
-
-// JSON-struktur
-const json = pm.response.json();
-pm.test("Har fältet 'id'", () => pm.expect(json).to.have.property('id'));
-pm.test("count är ett nummer", () => pm.expect(json.count).to.be.a('number'));
-
-// Header
-pm.test("Returnerar JSON", () => {
-    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');
-});
-
-// Spara värde till variabel
-pm.collectionVariables.set("token", json.token);
-```
-
-## Felsökning
-
-**Port 8080 är upptagen?**
-Ändra port i `src/main/resources/application.properties`:
-```
-server.port=8081
-```
-och uppdatera `baseUrl` i Postman till `http://localhost:8081`.
-
-**Maven hittas inte?**
-Installera Maven från [maven.apache.org](https://maven.apache.org/install.html) eller använd Maven Wrapper:
-```bash
-./mvnw spring-boot:run
-```
-
-**Data försvinner när jag startar om?**
-Det är meningen - allt lagras i minnet. Vid omstart laddas testdatan om från scratch så du alltid kan börja på en känd grund.
+### Övningskrokar / kända begränsningar (`// TODO (övning)` i koden)
+- **Stateless logout:** `POST /api/auth/logout` invaliderar inte JWT:n på serversidan. *Övning:* implementera en denylist över utloggade tokens.
+- **Rollbyte nollställer behörigheter:** `AccountService.changeRole` återställer behörigheterna till rollens standard. *Övning:* bestäm önskat beteende och ändra det.
+- **JWT-hemlighet i klartext:** `app.jwt.secret` ligger i `application.properties`. *Övning:* flytta till en miljövariabel.
 
 ## Projektstruktur
 
@@ -265,19 +204,37 @@ API-testing/
 ├── postman/
 │   ├── API-Testing-Practice.postman_collection.json
 │   └── API-Testing-Practice.postman_environment.json
-└── src/
-    ├── main/
-    │   ├── java/com/apitesting/
-    │   │   ├── ApiTestingApplication.java
-    │   │   ├── controller/      (BookController, UserController, AuthController, StatusController)
-    │   │   ├── model/           (Book, User, LoginRequest, LoginResponse, ErrorResponse)
-    │   │   ├── service/         (BookService, UserService, AuthService)
-    │   │   └── exception/       (ResourceNotFoundException, GlobalExceptionHandler m.fl.)
-    │   └── resources/
-    │       └── application.properties
-    └── test/
-        └── java/com/apitesting/
-            └── ApiTestingApplicationTests.java
+├── src/
+│   ├── main/java/com/apitesting/
+│   │   ├── ApiTestingApplication.java
+│   │   ├── config/        (SecurityConfig)
+│   │   ├── controller/    (Book, User, Auth, Admin, Status)
+│   │   ├── model/         (Book, User, Account, AccountResponse, Login*, ErrorResponse)
+│   │   ├── security/      (Role, Permission, JwtService, JwtAuthenticationFilter,
+│   │   │                   CustomUserDetailsService, Rest*EntryPoint/Handler)
+│   │   ├── service/       (BookService, UserService, AccountService, AuthService)
+│   │   └── exception/     (GlobalExceptionHandler m.fl.)
+│   ├── main/resources/application.properties
+│   └── test/java/com/apitesting/ (ApiTestingApplicationTests, AuthIntegrationTest)
+└── frontend/
+    ├── package.json, vite.config.ts, tsconfig*.json, playwright.config.ts
+    ├── src/
+    │   ├── api/client.ts          (fetch-wrapper, Bearer, 401/403)
+    │   ├── auth/                  (AuthContext, ProtectedRoute)
+    │   ├── components/            (ProtectedLayout)
+    │   ├── pages/                 (Login, Books, Users, Admin)
+    │   └── types.ts
+    └── e2e/                       (auth, permissions, books-crud specs)
 ```
+
+## Felsökning
+
+**Port 8080 upptagen?** Ändra `server.port` i `application.properties` och uppdatera `baseUrl` i Postman / Vite-proxyn.
+
+**Frontend når inte API:et?** Kontrollera att backend kör på 8080 och att du startade frontend med `npm run dev` (proxyn gäller bara devservern).
+
+**Playwright säger "Executable doesn't exist"?** Kör inte `playwright install` i den här miljön – webbläsarna är förinstallerade. `@playwright/test`-versionen i `package.json` är pinnad för att matcha dem.
+
+**Data försvann vid omstart?** Det är meningen – allt lagras i minnet och seedas om vid start.
 
 Lycka till med övningarna!

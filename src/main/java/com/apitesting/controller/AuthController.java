@@ -1,16 +1,25 @@
 package com.apitesting.controller;
 
 import com.apitesting.exception.UnauthorizedException;
+import com.apitesting.model.Account;
 import com.apitesting.model.LoginRequest;
 import com.apitesting.model.LoginResponse;
+import com.apitesting.security.JwtService;
+import com.apitesting.service.AccountService;
 import com.apitesting.service.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -18,57 +27,68 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final AccountService accountService;
+    private final JwtService jwtService;
+    private final AuthenticationManager authenticationManager;
 
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService,
+                          AccountService accountService,
+                          JwtService jwtService,
+                          AuthenticationManager authenticationManager) {
         this.authService = authService;
+        this.accountService = accountService;
+        this.jwtService = jwtService;
+        this.authenticationManager = authenticationManager;
     }
 
-    // POST /api/auth/login - Logga in och få en token
+    // POST /api/auth/login - Verifiera lösenord och få en JWT
     @PostMapping("/login")
     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
-        if (!authService.validateCredentials(request.getUsername(), request.getPassword())) {
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword()));
+        } catch (BadCredentialsException ex) {
             Map<String, String> error = new HashMap<>();
             error.put("error", "Unauthorized");
             error.put("message", "Felaktigt användarnamn eller lösenord");
             return ResponseEntity.status(401).body(error);
         }
-        String token = authService.generateToken(request.getUsername());
-        LoginResponse response = new LoginResponse(token, request.getUsername(), "ADMIN", 3600);
+
+        Account account = accountService.findByUsername(request.getUsername());
+        String token = jwtService.generateToken(account);
+        List<String> permissions = account.getPermissions().stream().map(Enum::name).toList();
+        LoginResponse response = new LoginResponse(
+                token,
+                account.getUsername(),
+                account.getRole().name(),
+                permissions,
+                jwtService.getExpirationMs() / 1000);
         return ResponseEntity.ok(response);
     }
 
-    // POST /api/auth/logout - Logga ut (invaliderar token)
+    // POST /api/auth/logout - Stateless: klienten släpper sin token.
+    // TODO (övning): en riktig logout kräver en denylist över invaliderade tokens.
     @PostMapping("/logout")
-    public ResponseEntity<Map<String, String>> logout(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new UnauthorizedException("Bearer token saknas");
-        }
-        String token = authHeader.substring(7);
-        authService.invalidateToken(token);
+    public ResponseEntity<Map<String, String>> logout() {
         Map<String, String> response = new HashMap<>();
         response.put("message", "Utloggad");
         return ResponseEntity.ok(response);
     }
 
-    // GET /api/auth/me - Hämta inloggad användare (kräver Bearer token)
+    // GET /api/auth/me - Hämta inloggad användare från säkerhetskontexten
     @GetMapping("/me")
-    public ResponseEntity<?> me(@RequestHeader(value = "Authorization", required = false) String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new UnauthorizedException("Bearer token saknas");
-        }
-        String token = authHeader.substring(7);
-        if (!authService.isTokenValid(token)) {
-            throw new UnauthorizedException("Ogiltig eller utgången token");
-        }
+    public ResponseEntity<?> me(Authentication authentication) {
+        Account account = accountService.findByUsername(authentication.getName());
         Map<String, Object> response = new HashMap<>();
-        response.put("username", "admin");
-        response.put("role", "ADMIN");
+        response.put("username", account.getUsername());
+        response.put("role", account.getRole().name());
+        response.put("permissions", authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority).toList());
         response.put("authenticated", true);
         return ResponseEntity.ok(response);
     }
 
-    // GET /api/auth/basic - Endpoint skyddad med Basic Auth
+    // GET /api/auth/basic - Fristående övning för Basic Auth
     @GetMapping("/basic")
     public ResponseEntity<?> basicAuth(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Basic ")) {
@@ -88,7 +108,7 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    // GET /api/auth/api-key - Endpoint skyddad med API-nyckel i header
+    // GET /api/auth/api-key - Fristående övning för API-nyckel i header
     @GetMapping("/api-key")
     public ResponseEntity<?> apiKey(@RequestHeader(value = "X-API-Key", required = false) String apiKey) {
         if (apiKey == null || !authService.isApiKeyValid(apiKey)) {
