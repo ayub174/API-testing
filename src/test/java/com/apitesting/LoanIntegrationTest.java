@@ -132,14 +132,37 @@ class LoanIntegrationTest {
     }
 
     @Test
-    void onlyAdminCanCreateAccounts() throws Exception {
+    void handlaggareCanManageBorrowerAccountsOnly() throws Exception {
         String handlaggareToken = login("handlaggare", "handlaggare123");
+
+        // Får skapa en låntagare (ANVANDARE).
         mockMvc.perform(post("/api/admin/accounts")
                         .header("Authorization", "Bearer " + handlaggareToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"x\",\"password\":\"hemligt\",\"role\":\"ANVANDARE\"}"))
+                        .content("{\"username\":\"lantagareh1\",\"password\":\"hemligt\",\"role\":\"ANVANDARE\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("ANVANDARE"));
+
+        // Får INTE skapa personalkonto.
+        mockMvc.perform(post("/api/admin/accounts")
+                        .header("Authorization", "Bearer " + handlaggareToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"chefh1\",\"password\":\"hemligt\",\"role\":\"HANDLAGGARE\"}"))
                 .andExpect(status().isForbidden());
 
+        // Får ta bort en låntagare, men inte ett personalkonto (admin).
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/admin/accounts/lantagareh1")
+                        .header("Authorization", "Bearer " + handlaggareToken))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/admin/accounts/admin")
+                        .header("Authorization", "Bearer " + handlaggareToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void adminCanCreateAndDeleteStaffAccounts() throws Exception {
         String adminToken = login("admin", "hemligt123");
         mockMvc.perform(post("/api/admin/accounts")
                         .header("Authorization", "Bearer " + adminToken)

@@ -801,12 +801,13 @@
           }
         },
         {
-          "name": "GET - Admin-konton som handläggare (403)",
+          "name": "GET - Behörighetslista som handläggare (403)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
+                  "// Handläggare har ACCOUNT_MANAGE men inte PERMISSION_MANAGE.",
                   "pm.test('Status är 403', function () {",
                   "    pm.response.to.have.status(403);",
                   "});"
@@ -821,9 +822,9 @@
               { "key": "Authorization", "value": "Bearer {{handlaggareToken}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/admin/accounts",
+              "raw": "{{baseUrl}}/api/admin/permissions",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "admin", "accounts"]
+              "path": ["api", "admin", "permissions"]
             }
           }
         },

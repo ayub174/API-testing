@@ -8,10 +8,15 @@ test('admin ser Ta bort-knappar och Admin-länk', async ({ page }) => {
   await expect(page.locator('[data-testid^="delete-"]').first()).toBeVisible();
 });
 
-test('handläggare saknar Ta bort och Admin-länk', async ({ page }) => {
+test('handläggare har låntagar-admin men inte behörighetshantering', async ({ page }) => {
   await loginAsHandlaggare(page);
-  await expect(page.getByRole('link', { name: 'Admin' })).toHaveCount(0);
+  // Inga bok-borttagningsknappar, men formuläret för att skapa böcker finns.
   await expect(page.locator('[data-testid^="delete-"]')).toHaveCount(0);
-  // Men handläggare får skapa böcker (BOOK_CREATE finns som standard).
   await expect(page.getByTestId('book-form')).toBeVisible();
+
+  // Har en Admin-länk för låntagarkonton ...
+  await page.getByRole('link', { name: 'Admin' }).click();
+  await expect(page.getByTestId('create-account-form')).toBeVisible();
+  // ... men ingen behörighetsmatris (inga perm-kryssrutor).
+  await expect(page.locator('[data-testid^="perm-"]')).toHaveCount(0);
 });

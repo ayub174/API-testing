@@ -8,6 +8,9 @@ import com.apitesting.security.Role;
 import com.apitesting.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
@@ -41,21 +44,38 @@ public class AdminController {
         return ResponseEntity.ok(accounts);
     }
 
-    // POST /api/admin/accounts - skapa ett konto med valfri roll (ACCOUNT_MANAGE)
+    // POST /api/admin/accounts - skapa ett konto (ACCOUNT_MANAGE).
+    // Personal utan PERMISSION_MANAGE får bara skapa låntagare (ANVANDARE).
     @PostMapping("/accounts")
-    public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request) {
-        Account account = accountService.createAccount(
-                request.getUsername(), request.getPassword(), parseRole(request.getRole()));
+    public ResponseEntity<AccountResponse> createAccount(@Valid @RequestBody CreateAccountRequest request,
+                                                         Authentication auth) {
+        Role role = parseRole(request.getRole());
+        if (role != Role.ANVANDARE && !canManageStaff(auth)) {
+            throw new AccessDeniedException("Endast admin kan skapa konton med rollen " + role);
+        }
+        Account account = accountService.createAccount(request.getUsername(), request.getPassword(), role);
         return ResponseEntity
                 .created(URI.create("/api/admin/accounts/" + account.getUsername()))
                 .body(new AccountResponse(account));
     }
 
-    // DELETE /api/admin/accounts/{username} - ta bort ett konto (ACCOUNT_MANAGE)
+    // DELETE /api/admin/accounts/{username} - ta bort ett konto (ACCOUNT_MANAGE).
+    // Personal utan PERMISSION_MANAGE får bara ta bort låntagare (ANVANDARE).
     @DeleteMapping("/accounts/{username}")
-    public ResponseEntity<Void> deleteAccount(@PathVariable String username) {
+    public ResponseEntity<Void> deleteAccount(@PathVariable String username, Authentication auth) {
+        Account target = accountService.findByUsername(username);
+        if (target.getRole() != Role.ANVANDARE && !canManageStaff(auth)) {
+            throw new AccessDeniedException("Endast admin kan ta bort konton med rollen " + target.getRole());
+        }
         accountService.deleteAccount(username);
         return ResponseEntity.noContent().build();
+    }
+
+    /** Sant om den inloggade får hantera personalkonton/roller (admin). */
+    private boolean canManageStaff(Authentication auth) {
+        return auth.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(a -> a.equals(Permission.PERMISSION_MANAGE.name()));
     }
 
     // POST /api/admin/accounts/{username}/permissions/{permission} - ge behörighet

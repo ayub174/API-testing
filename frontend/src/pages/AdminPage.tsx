@@ -14,6 +14,10 @@ export default function AdminPage() {
   const canManageAccounts = hasPermission('ACCOUNT_MANAGE');
   const canManagePermissions = hasPermission('PERMISSION_MANAGE');
 
+  // Personal utan PERMISSION_MANAGE får bara skapa/ta bort låntagare (ANVANDARE).
+  const creatableRoles = canManagePermissions ? roles : roles.filter((r) => r === 'ANVANDARE');
+  const canDeleteAccount = (role: Role) => canManagePermissions || role === 'ANVANDARE';
+
   const [form, setForm] = useState({ username: '', password: '', role: 'ANVANDARE' });
 
   async function load() {
@@ -87,10 +91,11 @@ export default function AdminPage() {
 
   return (
     <div>
-      <h2>Admin – konton & behörigheter</h2>
+      <h2>{canManagePermissions ? 'Admin – konton & behörigheter' : 'Låntagarkonton'}</h2>
       <p className="muted">
-        Bocka i/ur behörigheter per konto, byt roll, eller skapa/ta bort konton.
-        Ändringar slår igenom direkt (kontot kan behöva ladda om sin vy).
+        {canManagePermissions
+          ? 'Bocka i/ur behörigheter per konto, byt roll, eller skapa/ta bort konton. Ändringar slår igenom direkt (kontot kan behöva ladda om sin vy).'
+          : 'Skapa och ta bort låntagarkonton. Roller och behörigheter hanteras av en administratör.'}
       </p>
       {error && (
         <div className="error" role="alert" data-testid="admin-error">
@@ -122,7 +127,7 @@ export default function AdminPage() {
               onChange={(e) => setForm({ ...form, role: e.target.value })}
               data-testid="new-account-role"
             >
-              {roles.map((r) => (
+              {creatableRoles.map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
@@ -142,12 +147,13 @@ export default function AdminPage() {
           <tr>
             <th>Konto</th>
             <th>Roll</th>
-            {permissions.map((p) => (
-              <th key={p} className="perm-col">
-                {p}
-              </th>
-            ))}
-            {canManageAccounts && <th>Konto</th>}
+            {canManagePermissions &&
+              permissions.map((p) => (
+                <th key={p} className="perm-col">
+                  {p}
+                </th>
+              ))}
+            {canManageAccounts && <th>Åtgärd</th>}
           </tr>
         </thead>
         <tbody>
@@ -168,26 +174,28 @@ export default function AdminPage() {
                   ))}
                 </select>
               </td>
-              {permissions.map((p) => (
-                <td key={p} className="perm-col">
-                  <input
-                    type="checkbox"
-                    checked={account.permissions.includes(p)}
-                    disabled={!canManagePermissions}
-                    onChange={(e) => togglePermission(account, p, e.target.checked)}
-                    data-testid={`perm-${account.username}-${p}`}
-                  />
-                </td>
-              ))}
+              {canManagePermissions &&
+                permissions.map((p) => (
+                  <td key={p} className="perm-col">
+                    <input
+                      type="checkbox"
+                      checked={account.permissions.includes(p)}
+                      onChange={(e) => togglePermission(account, p, e.target.checked)}
+                      data-testid={`perm-${account.username}-${p}`}
+                    />
+                  </td>
+                ))}
               {canManageAccounts && (
                 <td className="actions">
-                  <button
-                    className="danger"
-                    onClick={() => handleDelete(account.username)}
-                    data-testid={`delete-account-${account.username}`}
-                  >
-                    Ta bort
-                  </button>
+                  {canDeleteAccount(account.role) && (
+                    <button
+                      className="danger"
+                      onClick={() => handleDelete(account.username)}
+                      data-testid={`delete-account-${account.username}`}
+                    >
+                      Ta bort
+                    </button>
+                  )}
                 </td>
               )}
             </tr>

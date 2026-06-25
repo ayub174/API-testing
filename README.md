@@ -74,7 +74,7 @@ Inloggning sker numera mot **Spring Security + JWT**. `POST /api/auth/login` ret
 ### De tre rollerna
 
 - **ANVANDARE** (låntagare) – söker böcker, lånar och återlämnar, ser sina egna lån.
-- **HANDLAGGARE** (bibliotekarie) – sköter katalog och lager, ser alla lån och hanterar lånedisken (lånar/återlämnar åt låntagare).
+- **HANDLAGGARE** (bibliotekarie) – sköter katalog och lager, ser alla lån, hanterar lånedisken (lånar/återlämnar åt låntagare) och kan skapa/ta bort **låntagarkonton** (men inte personalkonton, roller eller behörigheter).
 - **ADMIN** – full kontroll: personalkonton, roller/behörigheter och permanent borttagning av böcker.
 
 ### Testkonton (seedas vid uppstart)
@@ -100,8 +100,10 @@ Inloggning sker numera mot **Spring Security + JWT**. `POST /api/auth/login` ret
 | `LOAN_MANAGE` | låna/återlämna åt en låntagare | | ✅ | ✅ |
 | `USER_READ` | läsa användarlistan | | ✅ | ✅ |
 | `USER_MANAGE` | uppdatera/ta bort användare | | ✅ | ✅ |
-| `ACCOUNT_MANAGE` | skapa/ta bort inloggningskonton | | | ✅ |
+| `ACCOUNT_MANAGE` | skapa/ta bort inloggningskonton¹ | | ✅ | ✅ |
 | `PERMISSION_MANAGE` | hantera roller och behörigheter | | | ✅ |
+
+¹ Handläggare med `ACCOUNT_MANAGE` får bara skapa/ta bort **låntagarkonton** (`ANVANDARE`); endast admin (`PERMISSION_MANAGE`) får hantera personalkonton, roller och behörigheter.
 
 En **admin** kan i admin-vyn (eller via `/api/admin`-endpoints) **lägga till och ta bort** enskilda behörigheter per konto, och byta roll. Ändringar slår igenom **direkt** – behörigheten kontrolleras live vid varje anrop, inte bara mot token-innehållet.
 

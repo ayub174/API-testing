@@ -80,9 +80,14 @@ class AuthIntegrationTest {
     }
 
     @Test
-    void handlaggareCannotAccessAdmin() throws Exception {
+    void handlaggareCannotManageRolesOrPermissions() throws Exception {
+        // Handläggare har ACCOUNT_MANAGE men inte PERMISSION_MANAGE: behörighets-
+        // och roll-endpoints är därför fortfarande förbjudna.
         String token = login("handlaggare", "handlaggare123");
-        mockMvc.perform(get("/api/admin/accounts").header("Authorization", "Bearer " + token))
+        mockMvc.perform(get("/api/admin/permissions").header("Authorization", "Bearer " + token))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/admin/accounts/anvandare/permissions/BOOK_DELETE")
+                        .header("Authorization", "Bearer " + token))
                 .andExpect(status().isForbidden());
     }
 

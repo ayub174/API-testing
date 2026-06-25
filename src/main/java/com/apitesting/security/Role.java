@@ -24,7 +24,9 @@ public enum Role {
             Permission.LOAN_RETURN,
             Permission.LOAN_VIEW_OWN,
             Permission.LOAN_VIEW_ALL,
-            Permission.LOAN_MANAGE
+            Permission.LOAN_MANAGE,
+            // Får hantera låntagarkonton (ANVANDARE) – men inte personal/roller.
+            Permission.ACCOUNT_MANAGE
     )),
 
     ANVANDARE(EnumSet.of(
