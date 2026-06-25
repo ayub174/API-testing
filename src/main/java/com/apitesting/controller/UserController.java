@@ -1,8 +1,6 @@
 package com.apitesting.controller;
 
-import com.apitesting.exception.UnauthorizedException;
 import com.apitesting.model.User;
-import com.apitesting.service.AuthService;
 import com.apitesting.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -13,36 +11,34 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * CRUD för "användare" (en demoresurs, t.ex. kunder). Behörigheten styrs
+ * centralt i SecurityConfig: läsning kräver USER_READ, ändring USER_MANAGE.
+ * Registrering (POST) är öppen.
+ */
 @RestController
 @RequestMapping("/api/users")
 public class UserController {
 
     private final UserService userService;
-    private final AuthService authService;
 
-    public UserController(UserService userService, AuthService authService) {
+    public UserController(UserService userService) {
         this.userService = userService;
-        this.authService = authService;
     }
 
-    // GET /api/users - Skyddad endpoint som kräver Bearer token
+    // GET /api/users - kräver USER_READ
     @GetMapping
-    public ResponseEntity<List<User>> getAllUsers(
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        validateBearerToken(authHeader);
+    public ResponseEntity<List<User>> getAllUsers() {
         return ResponseEntity.ok(userService.findAll());
     }
 
-    // GET /api/users/{id} - Skyddad endpoint
+    // GET /api/users/{id} - kräver USER_READ
     @GetMapping("/{id}")
-    public ResponseEntity<User> getUserById(
-            @PathVariable Long id,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        validateBearerToken(authHeader);
+    public ResponseEntity<User> getUserById(@PathVariable Long id) {
         return ResponseEntity.ok(userService.findById(id));
     }
 
-    // POST /api/users - Registrera en ny användare (kräver ingen auth)
+    // POST /api/users - öppen självregistrering
     @PostMapping
     public ResponseEntity<?> createUser(@Valid @RequestBody User user) {
         if (userService.emailExists(user.getEmail())) {
@@ -56,33 +52,16 @@ public class UserController {
         return ResponseEntity.created(location).body(created);
     }
 
-    // PUT /api/users/{id} - Uppdatera användare (kräver Bearer token)
+    // PUT /api/users/{id} - kräver USER_MANAGE
     @PutMapping("/{id}")
-    public ResponseEntity<User> updateUser(
-            @PathVariable Long id,
-            @Valid @RequestBody User user,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        validateBearerToken(authHeader);
+    public ResponseEntity<User> updateUser(@PathVariable Long id, @Valid @RequestBody User user) {
         return ResponseEntity.ok(userService.update(id, user));
     }
 
-    // DELETE /api/users/{id} - Skyddad endpoint
+    // DELETE /api/users/{id} - kräver USER_MANAGE
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteUser(
-            @PathVariable Long id,
-            @RequestHeader(value = "Authorization", required = false) String authHeader) {
-        validateBearerToken(authHeader);
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
         userService.delete(id);
         return ResponseEntity.noContent().build();
-    }
-
-    private void validateBearerToken(String authHeader) {
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new UnauthorizedException("Bearer token saknas eller är felaktigt formaterad");
-        }
-        String token = authHeader.substring(7);
-        if (!authService.isTokenValid(token)) {
-            throw new UnauthorizedException("Ogiltig eller utgången token");
-        }
     }
 }
